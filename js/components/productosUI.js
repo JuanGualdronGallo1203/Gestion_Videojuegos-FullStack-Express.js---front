@@ -4,8 +4,9 @@ class ProductosUI {
     static productosFiltrados = [];
 
     static init() {
+        // init() SÓLO debe registrar los listeners, no cargar datos.
+        // App.js se encargará de la carga inicial.
         this.setupEventListeners();
-        this.loadProducts();
     }
 
     static setupEventListeners() {
@@ -50,14 +51,14 @@ class ProductosUI {
         Helpers.showLoading('loadingProductos');
         
         try {
-            const result = await ProductosApi.obtenerTodos();
+            const result = await ProductosService.cargarProductos();
             
             if (result.success) {
                 this.productos = result.data || [];
                 this.productosFiltrados = [...this.productos];
                 this.renderProducts();
                 this.updateHeaderStats();
-                Helpers.showNotification(`Cargados ${this.productos.length} productos`, 'success');
+                Helpers.showNotification(result.message || 'Productos cargados', 'success');
             } else {
                 throw new Error(result.error || 'Error al cargar productos');
             }
@@ -78,15 +79,17 @@ class ProductosUI {
         if (this.productosFiltrados.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" class="text-center">
-                        No se encontraron productos
+                    <td colspan="6" class="text-center" style="padding: 2rem; color: #6c757d;">
+                        📭 No se encontraron productos
                     </td>
                 </tr>
             `;
             return;
         }
 
-        tbody.innerHTML = this.productosFiltrados.map(producto => `
+        tbody.innerHTML = this.productosFiltrados.map(producto => {
+            const status = Helpers.getStockStatus(producto.cantidad || 0);
+            return `
             <tr>
                 <td>
                     <strong>${Helpers.sanitizeText(producto.nombre)}</strong>
@@ -98,16 +101,9 @@ class ProductosUI {
                     </span>
                 </td>
                 <td>${Helpers.formatCurrency(producto.precio || 0)}</td>
+                <td>${producto.cantidad || 0}</td>
                 <td>
-                    <span>${producto.cantidad || 0}</span>
-                    <div class="progress" style="height: 4px; margin-top: 5px; width: 80px;">
-                        <div class="progress-bar ${producto.cantidad === 0 ? 'bg-danger' : producto.cantidad < 5 ? 'bg-warning' : 'bg-success'}" 
-                             style="width: ${Math.min(((producto.cantidad || 0) / 10) * 100, 100)}%">
-                        </div>
-                    </div>
-                </td>
-                <td>
-                    ${this.renderStockStatus(producto.cantidad || 0)}
+                    <span class="status-badge ${status.class}">${status.text}</span>
                 </td>
                 <td>
                     <div class="btn-group">
@@ -117,9 +113,9 @@ class ProductosUI {
                             ✏️
                         </button>
                         <button class="btn-action btn-sell" 
-                                onclick="VentasUI.showSaleModal('${producto._id}')" 
+                                onclick="VentasUI.abrirModalNuevaVenta('${producto._id}')" 
                                 title="Vender producto"
-                                ${(producto.cantidad || 0) === 0 ? 'disabled' : ''}>
+                                ${status.status === 'out' ? 'disabled' : ''}>
                             🛒
                         </button>
                         <button class="btn-action btn-delete" 
@@ -130,25 +126,20 @@ class ProductosUI {
                     </div>
                 </td>
             </tr>
-        `).join('');
-    }
-
-    static renderStockStatus(quantity) {
-        const status = Helpers.getStockStatus(quantity);
-        return `<span class="status-badge ${status.class}">${status.text}</span>`;
+        `}).join('');
     }
 
     static async searchProducts(term) {
         const searchTerm = Helpers.sanitizeText(term);
         
         if (!searchTerm || searchTerm.length < 2) {
-            this.productosFiltrados = [...this.productos];
-            this.renderProducts();
+            this.filterProducts();
             return;
         }
 
+        Helpers.showLoading('loadingProductos');
         try {
-            const result = await ProductosApi.buscarPorNombre(searchTerm);
+            const result = await ProductosService.buscarProductos(searchTerm);
             
             if (result.success) {
                 this.productosFiltrados = result.data || [];
@@ -158,6 +149,8 @@ class ProductosUI {
             }
         } catch (error) {
             Helpers.showNotification(error.message, 'error');
+        } finally {
+            Helpers.hideLoading('loadingProductos');
         }
     }
 
@@ -165,21 +158,8 @@ class ProductosUI {
         const tipo = document.getElementById('filtroTipo')?.value || '';
         const stock = document.getElementById('filtroStock')?.value || '';
         
-        let filtered = [...this.productos];
-
-        // Filtrar por tipo
-        if (tipo) {
-            filtered = filtered.filter(producto => producto.tipo === tipo);
-        }
-
-        // Filtrar por stock
-        if (stock === 'bajo') {
-            filtered = filtered.filter(producto => (producto.cantidad || 0) < 5 && (producto.cantidad || 0) > 0);
-        } else if (stock === 'sin') {
-            filtered = filtered.filter(producto => (producto.cantidad || 0) === 0);
-        }
-
-        this.productosFiltrados = filtered;
+        this.productosFiltrados = ProductosService.filtrarProductos(this.productos, { tipo, stock });
+        
         this.renderProducts();
     }
 
@@ -189,7 +169,6 @@ class ProductosUI {
         const productoId = document.getElementById('productoId');
 
         if (producto) {
-            // Modo edición
             titulo.textContent = 'Editar Producto';
             productoId.value = producto._id;
             document.getElementById('nombre').value = producto.nombre || '';
@@ -198,7 +177,6 @@ class ProductosUI {
             document.getElementById('cantidad').value = producto.cantidad || '';
             document.getElementById('descripcion').value = producto.descripcion || '';
         } else {
-            // Modo creación
             titulo.textContent = 'Nuevo Producto';
             ModalHelper.clearForm('formProducto');
         }
@@ -218,12 +196,6 @@ class ProductosUI {
             descripcion: document.getElementById('descripcion').value
         };
 
-        // Validaciones básicas
-        if (!productoData.nombre || !productoData.tipo || productoData.precio === null || productoData.cantidad === null) {
-            Helpers.showNotification('Por favor complete todos los campos requeridos', 'error');
-            return;
-        }
-
         const btnGuardar = document.getElementById('btnGuardarProducto');
         const originalText = btnGuardar.innerHTML;
         btnGuardar.innerHTML = '<span>⏳</span> Guardando...';
@@ -232,17 +204,18 @@ class ProductosUI {
         try {
             let result;
             if (productoId) {
-                result = await ProductosApi.actualizar(productoId, productoData);
+                result = await ProductosService.actualizarProducto(productoId, productoData);
             } else {
-                result = await ProductosApi.crear(productoData);
+                result = await ProductosService.crearProducto(productoData);
             }
 
             if (result.success) {
-                Helpers.showNotification(result.message || 'Producto guardado exitosamente', 'success');
+                Helpers.showNotification(result.message || 'Producto guardado', 'success');
                 ModalHelper.closeModal('modalProducto');
-                await this.loadProducts();
+                await this.loadProducts(); 
             } else {
-                throw new Error(result.error || 'Error al guardar el producto');
+                const errorMsg = result.errors ? result.errors.join(', ') : (result.error || 'Error al guardar');
+                Helpers.showNotification(errorMsg, 'error');
             }
         } catch (error) {
             Helpers.showNotification(error.message, 'error');
@@ -252,17 +225,13 @@ class ProductosUI {
         }
     }
 
-    static async editProduct(id) {
-        try {
-            const response = await ProductosApi.obtenerPorId(id);
-            
-            if (response.success) {
-                this.showProductForm(response.data);
-            } else {
-                throw new Error(response.error || 'Error al cargar el producto');
-            }
-        } catch (error) {
-            Helpers.showNotification(error.message, 'error');
+    static editProduct(id) {
+        const producto = this.productos.find(p => p._id === id);
+        
+        if (producto) {
+            this.showProductForm(producto);
+        } else {
+            Helpers.showNotification('Error: Producto no encontrado', 'error');
         }
     }
 
@@ -270,38 +239,18 @@ class ProductosUI {
         const producto = this.productos.find(p => p._id === id);
         if (!producto) return;
 
-        const confirmacion = confirm(`¿Estás seguro de que quieres eliminar el producto "${producto.nombre}"?\n\nEsta acción no se puede deshacer.`);
+        const confirmacion = confirm(`¿Estás seguro de que quieres eliminar "${producto.nombre}"?`);
         
         if (!confirmacion) return;
 
         try {
-            // Primero verificar si el producto tiene ventas asociadas
-            const ventas = JSON.parse(localStorage.getItem('ventas')) || [];
-            const ventasAsociadas = ventas.filter(venta => venta.productoId === id);
-            
-            if (ventasAsociadas.length > 0) {
-                throw new Error(`No se puede eliminar el producto porque tiene ${ventasAsociadas.length} venta(s) asociada(s)`);
-            }
-
-            // Eliminar de la base de datos usando el servicio
             const result = await ProductosService.eliminarProducto(id);
             
             if (result.success) {
-                Helpers.showNotification(result.message || 'Producto eliminado exitosamente', 'success');
-                
-                // Actualizar la lista de productos local
-                this.productos = this.productos.filter(p => p._id !== id);
-                this.productosFiltrados = this.productosFiltrados.filter(p => p._id !== id);
-                this.renderProducts();
-                this.updateHeaderStats();
-                
-                // También eliminar del localStorage para mantener consistencia
-                const productosLocal = JSON.parse(localStorage.getItem('productos')) || [];
-                const productosActualizados = productosLocal.filter(p => p.id !== id);
-                localStorage.setItem('productos', JSON.stringify(productosActualizados));
-                
+                Helpers.showNotification(result.message || 'Producto eliminado', 'success');
+                await this.loadProducts(); 
             } else {
-                throw new Error(result.error || 'Error al eliminar el producto de la base de datos');
+                throw new Error(result.error || 'Error al eliminar el producto');
             }
         } catch (error) {
             Helpers.showNotification(error.message, 'error');
@@ -309,30 +258,32 @@ class ProductosUI {
     }
 
     static async loadLowStock() {
+        Helpers.showLoading('loadingProductos');
         try {
-            const result = await ProductosApi.obtenerBajoStock();
+            const result = await ProductosService.obtenerProductosBajoStock();
             
             if (result.success) {
                 this.productosFiltrados = result.data || [];
                 this.renderProducts();
-                Helpers.showNotification(`Mostrando ${this.productosFiltrados.length} productos con stock bajo`, 'success');
+                Helpers.showNotification(result.message || 'Mostrando productos con stock bajo', 'success');
             } else {
-                throw new Error(result.error || 'Error al cargar productos con stock bajo');
+                throw new Error(result.error || 'Error al cargar stock bajo');
             }
         } catch (error) {
             Helpers.showNotification(error.message, 'error');
+        } finally {
+            Helpers.hideLoading('loadingProductos');
         }
     }
 
     static updateHeaderStats() {
         const totalProductos = document.getElementById('totalProductos');
         if (totalProductos) {
-            totalProductos.textContent = this.productos.length;
+            totalProductos.textContent = this.productos.filter(p => p.activo !== false).length;
         }
     }
 }
 
-// Inicializar cuando el DOM esté listo
-document.addEventListener('DOMContentLoaded', function() {
-    ProductosUI.init();
-});
+// --- LÍNEA AÑADIDA ---
+// Esto "anuncia" la clase al navegador para que NavigationHelper la encuentre
+window.ProductosUI = ProductosUI;

@@ -2,31 +2,26 @@
 const API_BASE_URL = 'http://localhost:3000/api';
 
 class VentasApi {
-    // Get all sales
+    
+    // --- FUNCIÓN CORREGIDA ---
     static async obtenerTodas() {
         try {
             const response = await fetch(`${API_BASE_URL}/ventas`);
-            const data = await response.json();
+            const data = await response.json(); // data es { success: true, data: [...] }
             
             if (!response.ok) {
-                throw new Error(data.message || 'Error al obtener ventas');
+                // El backend ya envía un objeto de error
+                throw new Error(data.error || 'Error al obtener ventas');
             }
             
-            return {
-                success: true,
-                data: data
-            };
+            return data; // Devolver la respuesta directa del backend
         } catch (error) {
             console.error('Error en obtenerTodas:', error);
-            return {
-                success: false,
-                error: error.message,
-                data: []
-            };
+            return { success: false, error: error.message, data: [] };
         }
     }
 
-    // Create new sale
+    // --- FUNCIÓN CORREGIDA ---
     static async crear(ventaData) {
         try {
             const response = await fetch(`${API_BASE_URL}/ventas`, {
@@ -40,50 +35,35 @@ class VentasApi {
             const data = await response.json();
             
             if (!response.ok) {
-                return {
-                    success: false,
-                    error: data.message || 'Error al crear venta',
-                    errors: data.errors || []
-                };
+                // El backend ya envía { success: false, error: "..." }
+                throw new Error(data.error || 'Error al crear venta');
             }
             
-            return {
-                success: true,
-                data: data
-            };
+            return data; // Devolver la respuesta directa del backend
         } catch (error) {
             console.error('Error en crear:', error);
-            return {
-                success: false,
-                error: error.message
-            };
+            return { success: false, error: error.message };
         }
     }
 
-    // Get sale by ID
+    // --- FUNCIÓN CORREGIDA ---
     static async obtenerPorId(id) {
         try {
             const response = await fetch(`${API_BASE_URL}/ventas/${id}`);
             const data = await response.json();
             
             if (!response.ok) {
-                throw new Error(data.message || 'Error al obtener venta');
+                throw new Error(data.error || 'Error al obtener venta');
             }
             
-            return {
-                success: true,
-                data: data
-            };
+            return data; // Devolver la respuesta directa del backend
         } catch (error) {
             console.error('Error en obtenerPorId:', error);
-            return {
-                success: false,
-                error: error.message
-            };
+            return { success: false, error: error.message };
         }
     }
 
-    // Delete sale
+    // --- FUNCIÓN CORREGIDA ---
     static async eliminar(id) {
         try {
             const response = await fetch(`${API_BASE_URL}/ventas/${id}`, {
@@ -93,26 +73,17 @@ class VentasApi {
             const data = await response.json();
             
             if (!response.ok) {
-                return {
-                    success: false,
-                    error: data.message || 'Error al eliminar venta'
-                };
+                throw new Error(data.error || 'Error al eliminar venta');
             }
             
-            return {
-                success: true,
-                message: data.message || 'Venta eliminada exitosamente'
-            };
+            return data; // Devolver la respuesta directa del backend
         } catch (error) {
             console.error('Error en eliminar:', error);
-            return {
-                success: false,
-                error: error.message
-            };
+            return { success: false, error: error.message };
         }
     }
 
-    // Get sales by date range
+    // --- FUNCIÓN CORREGIDA ---
     static async obtenerPorFecha(fechaInicio, fechaFin) {
         try {
             const params = new URLSearchParams();
@@ -123,44 +94,30 @@ class VentasApi {
             const data = await response.json();
             
             if (!response.ok) {
-                throw new Error(data.message || 'Error al obtener ventas por fecha');
+                throw new Error(data.error || 'Error al obtener ventas por fecha');
             }
             
-            return {
-                success: true,
-                data: data
-            };
+            return data; // Devolver la respuesta directa del backend
         } catch (error) {
             console.error('Error en obtenerPorFecha:', error);
-            return {
-                success: false,
-                error: error.message,
-                data: []
-            };
+            return { success: false, error: error.message, data: [] };
         }
     }
 
-    // Get sales statistics
+    // --- FUNCIÓN CORREGIDA ---
     static async obtenerEstadisticas() {
         try {
             const response = await fetch(`${API_BASE_URL}/ventas/estadisticas`);
             const data = await response.json();
             
             if (!response.ok) {
-                throw new Error(data.message || 'Error al obtener estadísticas');
+                throw new Error(data.error || 'Error al obtener estadísticas');
             }
             
-            return {
-                success: true,
-                data: data
-            };
+            return data; // Devolver la respuesta directa del backend
         } catch (error) {
             console.error('Error en obtenerEstadisticas:', error);
-            return {
-                success: false,
-                error: error.message,
-                data: null
-            };
+            return { success: false, error: error.message, data: null };
         }
     }
 }

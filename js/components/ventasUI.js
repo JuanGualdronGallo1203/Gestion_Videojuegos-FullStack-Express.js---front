@@ -1,341 +1,365 @@
-// ui/ventasUI.js
+// (Este es el archivo que antes se llamaba js/models/Sale.js)
 class VentasUI {
-    static ventas = [];
-    static ventasFiltradas = [];
+    static ventasData = [];
+    static productosDisponibles = [];
 
     static init() {
-        console.log('🔧 Inicializando VentasUI...');
+        console.log('🛒 Inicializando VentasUI...');
+        // init() SÓLO debe registrar los listeners
         this.setupEventListeners();
-        this.loadVentas();
     }
 
     static setupEventListeners() {
-        // Botón nueva venta
-        const btnNuevaVenta = document.getElementById('btnNuevaVenta');
-        if (btnNuevaVenta) {
-            console.log('✅ Botón nueva venta encontrado');
-            btnNuevaVenta.addEventListener('click', () => {
-                console.log('🔄 Abriendo modal de venta...');
-                this.showVentaForm();
-            });
-        } else {
-            console.error('❌ No se encontró el botón btnNuevaVenta');
-        }
+        // Button: Nueva Venta
+        document.getElementById('btnNuevaVenta')?.addEventListener('click', () => this.abrirModalNuevaVenta());
 
-        // Modal events
-        const cerrarModal = document.getElementById('cerrarModalVenta');
-        if (cerrarModal) {
-            cerrarModal.addEventListener('click', () => {
-                this.closeVentaModal();
-            });
-        }
+        // Modal: Cerrar
+        document.getElementById('cerrarModalVenta')?.addEventListener('click', () => ModalHelper.closeModal('modalVenta'));
 
-        const cancelarVenta = document.getElementById('cancelarVenta');
-        if (cancelarVenta) {
-            cancelarVenta.addEventListener('click', () => {
-                this.closeVentaModal();
-            });
-        }
+        // Modal: Cancelar
+        document.getElementById('cancelarVenta')?.addEventListener('click', () => ModalHelper.closeModal('modalVenta'));
 
-        const formVenta = document.getElementById('formVenta');
-        if (formVenta) {
-            formVenta.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.saveVenta(e);
-            });
-        }
+        // Form: Submit
+        document.getElementById('formVenta')?.addEventListener('submit', (e) => this.handleSubmitVenta(e));
 
-        // Eventos para calcular total automáticamente
-        const productoSelect = document.getElementById('productoSelect');
-        if (productoSelect) {
-            productoSelect.addEventListener('change', () => {
-                this.updatePrecioUnitario();
-                this.calculateTotal();
-            });
-        }
+        // Select: Producto change
+        document.getElementById('selectProducto')?.addEventListener('change', () => this.actualizarInfoProducto());
 
-        const cantidadVenta = document.getElementById('cantidadVenta');
-        if (cantidadVenta) {
-            cantidadVenta.addEventListener('input', () => {
-                this.calculateTotal();
-            });
-        }
+        // Input: Cantidad change
+        document.getElementById('cantidadVenta')?.addEventListener('input', () => this.actualizarResumenVenta());
 
-        // Cerrar modal al hacer clic fuera
-        const modal = document.getElementById('modalVenta');
-        if (modal) {
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    this.closeVentaModal();
-                }
-            });
-        }
+        // Botón: Actualizar Estadísticas
+        document.getElementById('btnActualizarStats')?.addEventListener('click', () => this.loadStatistics());
     }
 
-    static loadVentas() {
+    static async loadSales() {
         console.log('📊 Cargando ventas...');
-        try {
-            // Verificar que el servicio existe
-            if (typeof ventasServices === 'undefined') {
-                throw new Error('Servicio de ventas no disponible');
-            }
+        Helpers.showLoading('loadingVentas');
 
-            this.ventas = ventasServices.obtenerVentas();
-            console.log(`✅ ${this.ventas.length} ventas cargadas:`, this.ventas);
-            
-            this.ventasFiltradas = [...this.ventas];
-            this.renderVentas();
-        } catch (error) {
-            console.error('❌ Error al cargar ventas:', error);
-            this.ventas = [];
-            this.ventasFiltradas = [];
-            this.renderVentas();
+        const result = await VentasService.cargarVentas();
+
+        Helpers.hideLoading('loadingVentas');
+
+        if (result.success) {
+            this.ventasData = result.data;
+            this.renderSales(result.data);
+            this.actualizarContadorVentas(); 
+            console.log(`✅ ${result.data.length} ventas cargadas`);
+        } else {
+            Helpers.showNotification(result.error || 'Error al cargar ventas', 'error');
+            this.renderSales([]);
         }
     }
 
-    static renderVentas() {
-        console.log('🎨 Renderizando ventas en tabla...');
+    static renderSales(ventas) {
         const tbody = document.getElementById('tablaVentasBody');
-        
-        if (!tbody) {
-            console.error('❌ No se encontró tablaVentasBody');
-            return;
-        }
+        if (!tbody) return;
 
-        if (this.ventasFiltradas.length === 0) {
-            console.log('📭 No hay ventas para mostrar');
+        if (ventas.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" class="text-center" style="padding: 40px; color: #6c757d;">
-                        <div style="font-size: 1.2rem; margin-bottom: 10px;">🛒</div>
-                        <strong>No hay ventas registradas</strong>
-                        <br>
-                        <small>Haz clic en "Nueva Venta" para registrar la primera venta</small>
+                    <td colspan="6" class="text-center">
+                        <p style="padding: 2rem; color: #6c757d;">
+                            📭 No hay ventas registradas
+                        </p>
                     </td>
                 </tr>
             `;
             return;
         }
 
-        console.log(`🔄 Renderizando ${this.ventasFiltradas.length} ventas`);
-        tbody.innerHTML = this.ventasFiltradas.map(venta => {
-            console.log('📝 Procesando venta:', venta);
-            return `
-                <tr>
-                    <td><strong>${this.escapeHtml(venta.productoNombre)}</strong></td>
-                    <td>${venta.cantidad}</td>
-                    <td>$${typeof venta.precioUnitario === 'number' ? venta.precioUnitario.toFixed(2) : '0.00'}</td>
-                    <td><strong>$${typeof venta.total === 'number' ? venta.total.toFixed(2) : '0.00'}</strong></td>
-                    <td>${venta.fecha || 'Sin fecha'}</td>
-                    <td>
-                        <div class="btn-group">
-                            <button class="action-btn delete-btn" 
-                                    onclick="VentasUI.deleteVenta(${venta.id})" 
-                                    title="Eliminar venta">
-                                🗑️
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-
-        console.log('✅ Tabla de ventas actualizada');
+        tbody.innerHTML = ventas.map(venta => this.createSaleRow(venta)).join('');
     }
 
-    static escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    static createSaleRow(venta) {
+        const productoNombre = venta.nombreProducto || 'Producto desconocido';
+        const cantidad = venta.cantidad || 0;
+        const precioUnitario = venta.precioUnitario || 0;
+        const total = venta.total || (cantidad * precioUnitario);
+        const fecha = Helpers.formatDate(venta.fecha);
+
+        return `
+            <tr data-venta-id="${venta._id}">
+                <td>
+                    <strong>${productoNombre}</strong>
+                </td>
+                <td>${cantidad}</td>
+                <td>${Helpers.formatCurrency(precioUnitario)}</td>
+                <td><strong>${Helpers.formatCurrency(total)}</strong></td>
+                <td>${fecha}</td>
+                <td>
+                    <button class="btn-action btn-delete" onclick="VentasUI.eliminarVenta('${venta._id}')" title="Eliminar venta">
+                        🗑️
+                    </button>
+                </td>
+            </tr>
+        `;
     }
 
-    static showVentaForm() {
-        console.log('📋 Mostrando formulario de venta');
-        this.loadProductosParaVenta();
-        this.clearVentaForm();
+    static async abrirModalNuevaVenta(productoId = null) {
+        ModalHelper.clearForm('formVenta');
         
-        const modal = document.getElementById('modalVenta');
-        if (modal) {
-            modal.style.display = 'flex';
-            modal.classList.remove('hidden');
-        } else {
-            console.error('❌ No se encontró modalVenta');
-        }
-    }
-
-    static closeVentaModal() {
-        console.log('🔒 Cerrando modal de venta');
-        const modal = document.getElementById('modalVenta');
-        if (modal) {
-            modal.style.display = 'none';
-            modal.classList.add('hidden');
-        }
-        this.clearVentaForm();
-    }
-
-    static clearVentaForm() {
-        const form = document.getElementById('formVenta');
-        if (form) {
-            form.reset();
-        }
+        const infoProducto = document.getElementById('infoProducto');
+        const resumenVenta = document.getElementById('resumenVenta');
+        if (infoProducto) infoProducto.classList.add('hidden');
+        if (resumenVenta) resumenVenta.classList.add('hidden');
         
-        const precioUnitario = document.getElementById('precioUnitario');
-        const totalVenta = document.getElementById('totalVenta');
+        ModalHelper.openModal('modalVenta');
         
-        if (precioUnitario) precioUnitario.value = '';
-        if (totalVenta) totalVenta.value = '';
+        await this.cargarProductosParaVenta(productoId);
     }
 
-    static loadProductosParaVenta() {
-        console.log('🔄 Cargando productos para venta...');
-        const select = document.getElementById('productoSelect');
-        if (!select) {
-            console.error('❌ No se encontró productoSelect');
-            return;
-        }
+    static async cargarProductosParaVenta(productoId = null) {
+        const selectProducto = document.getElementById('selectProducto');
+        if (!selectProducto) return;
 
-        try {
-            if (typeof ventasServices === 'undefined') {
-                throw new Error('Servicio de ventas no disponible');
+        selectProducto.innerHTML = '<option value="">Cargando productos...</option>';
+        selectProducto.disabled = true;
+
+        const result = await ProductosService.cargarProductos();
+
+        if (result.success) {
+            this.productosDisponibles = result.data;
+            
+            const productosConStock = result.data.filter(p => p.cantidad > 0 || p._id === productoId);
+
+            if (productosConStock.length === 0) {
+                selectProducto.innerHTML = '<option value="">No hay productos con stock disponible</option>';
+                return;
             }
 
-            const productos = ventasServices.obtenerProductosParaVenta();
-            console.log(`✅ ${productos.length} productos disponibles:`, productos);
-            
-            select.innerHTML = '<option value="">Seleccionar producto...</option>' +
-                productos.map(producto => `
-                    <option value="${producto.id}" data-precio="${producto.precio}">
-                        ${this.escapeHtml(producto.name || producto.nombre)} - Stock: ${producto.stock} - $${typeof producto.precio === 'number' ? producto.precio.toFixed(2) : '0.00'}
+            selectProducto.innerHTML = `
+                <option value="">Seleccionar producto...</option>
+                ${productosConStock.map(producto => `
+                    <option value="${producto._id}" data-precio="${producto.precio}" data-stock="${producto.cantidad}">
+                        ${producto.nombre} - Stock: ${producto.cantidad} - ${Helpers.formatCurrency(producto.precio)}
                     </option>
-                `).join('');
+                `).join('')}
+            `;
+            
+            selectProducto.disabled = false;
 
-        } catch (error) {
-            console.error('❌ Error al cargar productos para venta:', error);
-            select.innerHTML = '<option value="">Error al cargar productos</option>';
-        }
-    }
+            if (productoId) {
+                selectProducto.value = productoId;
+                selectProducto.dispatchEvent(new Event('change'));
+            }
 
-    static updatePrecioUnitario() {
-        const select = document.getElementById('productoSelect');
-        const precioInput = document.getElementById('precioUnitario');
-        
-        if (!select || !precioInput) return;
-
-        const selectedOption = select.options[select.selectedIndex];
-        if (selectedOption && selectedOption.value) {
-            const precio = selectedOption.getAttribute('data-precio');
-            precioInput.value = parseFloat(precio).toFixed(2);
-            console.log('💰 Precio unitario actualizado:', precioInput.value);
         } else {
-            precioInput.value = '';
+            selectProducto.innerHTML = '<option value="">Error al cargar productos</option>';
+            Helpers.showNotification(result.error || 'Error al cargar productos', 'error');
         }
     }
 
-    static calculateTotal() {
-        const precioInput = document.getElementById('precioUnitario');
-        const cantidadInput = document.getElementById('cantidadVenta');
-        const totalInput = document.getElementById('totalVenta');
+    static actualizarInfoProducto() {
+        const selectProducto = document.getElementById('selectProducto');
+        const infoProducto = document.getElementById('infoProducto');
+        const stockDisponible = document.getElementById('stockDisponible');
+        const precioProducto = document.getElementById('precioProducto');
+        const cantidadVenta = document.getElementById('cantidadVenta');
+        const btnProcesarVenta = document.getElementById('btnProcesarVenta');
+
+        if (!selectProducto || !infoProducto) return;
+
+        const selectedOption = selectProducto.options[selectProducto.selectedIndex];
         
-        if (!precioInput || !cantidadInput || !totalInput) return;
+        if (!selectedOption || !selectedOption.value) {
+            infoProducto.classList.add('hidden');
+            btnProcesarVenta.disabled = true;
+            return;
+        }
 
-        const precio = parseFloat(precioInput.value) || 0;
-        const cantidad = parseInt(cantidadInput.value) || 0;
+        const stock = selectedOption.getAttribute('data-stock');
+        const precio = selectedOption.getAttribute('data-precio');
+
+        if (stockDisponible) stockDisponible.textContent = stock;
+        if (precioProducto) precioProducto.textContent = precio;
         
-        totalInput.value = (precio * cantidad).toFixed(2);
-        console.log('🧮 Total calculado:', totalInput.value);
-    }
-
-    static async saveVenta(event) {
-        event.preventDefault();
-        console.log('💾 Guardando venta...');
-
-        const productoSelect = document.getElementById('productoSelect');
-        const cantidadInput = document.getElementById('cantidadVenta');
-
-        if (!productoSelect || !cantidadInput) {
-            alert('❌ Error: Elementos del formulario no encontrados');
-            return;
+        if (cantidadVenta) {
+            cantidadVenta.max = stock;
+            cantidadVenta.value = 1;
         }
 
-        const productoId = parseInt(productoSelect.value);
-        const cantidad = parseInt(cantidadInput.value);
-
-        // Validaciones
-        if (!productoId) {
-            alert('⚠️ Por favor seleccione un producto');
-            return;
-        }
-
-        if (!cantidad || cantidad <= 0) {
-            alert('⚠️ Por favor ingrese una cantidad válida');
-            return;
-        }
-
-        try {
-            if (typeof ventasServices === 'undefined') {
-                throw new Error('Servicio de ventas no disponible');
-            }
-
-            console.log('📦 Creando venta con:', { productoId, cantidad });
-            const venta = ventasServices.crearVenta({
-                productoId: productoId,
-                cantidad: cantidad
-            });
-
-            console.log('✅ Venta creada:', venta);
-            alert(`✅ Venta registrada exitosamente!\nProducto: ${venta.productoNombre}\nCantidad: ${venta.cantidad}\nTotal: $${venta.total.toFixed(2)}`);
-
-            // Actualizar la interfaz
-            this.closeVentaModal();
-            this.loadVentas(); // Recargar ventas para mostrar la nueva
-            
-            // Si existe la UI de productos, actualizarla también
-            if (typeof ProductosUI !== 'undefined' && typeof ProductosUI.loadProducts === 'function') {
-                console.log('🔄 Actualizando lista de productos...');
-                ProductosUI.loadProducts();
-            }
-
-        } catch (error) {
-            console.error('❌ Error al guardar venta:', error);
-            alert(`❌ Error: ${error.message}`);
+        if (parseInt(stock) === 0) {
+            Helpers.showNotification('Este producto no tiene stock disponible', 'error');
+            btnProcesarVenta.disabled = true;
+            infoProducto.classList.add('hidden'); 
+        } else {
+            btnProcesarVenta.disabled = false;
+            infoProducto.classList.remove('hidden');
+            this.actualizarResumenVenta();
         }
     }
 
-    static deleteVenta(id) {
-        console.log('🗑️ Solicitando eliminar venta:', id);
+    static actualizarResumenVenta() {
+        const selectProducto = document.getElementById('selectProducto');
+        const cantidadVenta = document.getElementById('cantidadVenta');
+        const resumenVenta = document.getElementById('resumenVenta');
+
+        if (!selectProducto || !cantidadVenta || !resumenVenta) return;
+
+        const selectedOption = selectProducto.options[selectProducto.selectedIndex];
         
-        if (!confirm('¿Estás seguro de que deseas eliminar esta venta?\n\nEsta acción restaurará el stock del producto.')) {
+        if (!selectedOption || !selectedOption.value) {
+            resumenVenta.classList.add('hidden');
             return;
         }
 
-        try {
-            if (typeof ventasServices === 'undefined') {
-                throw new Error('Servicio de ventas no disponible');
-            }
+        const stock = parseInt(selectedOption.getAttribute('data-stock'));
+        const precio = parseFloat(selectedOption.getAttribute('data-precio'));
+        let cantidad = parseInt(cantidadVenta.value) || 0;
 
-            ventasServices.eliminarVenta(id);
-            console.log('✅ Venta eliminada:', id);
-            
-            this.loadVentas(); // Recargar ventas después de eliminar
-            alert('✅ Venta eliminada exitosamente');
-            
-            // Si existe la UI de productos, actualizarla también
-            if (typeof ProductosUI !== 'undefined' && typeof ProductosUI.loadProducts === 'function') {
-                console.log('🔄 Actualizando lista de productos...');
-                ProductosUI.loadProducts();
-            }
-        } catch (error) {
-            console.error('❌ Error al eliminar venta:', error);
-            alert(`❌ Error: ${error.message}`);
+        if (cantidad > stock) {
+            cantidadVenta.value = stock;
+            cantidad = stock;
+            Helpers.showNotification('La cantidad no puede exceder el stock disponible', 'warning');
         }
+        
+        if (cantidad < 0) {
+           cantidadVenta.value = 1;
+           cantidad = 1;
+        }
+
+        this.actualizarResumenVentaConValores(stock, precio, cantidad);
+    }
+
+    static actualizarResumenVentaConValores(stock, precio, cantidad) {
+        const resumenVenta = document.getElementById('resumenVenta');
+        const totalVenta = document.getElementById('totalVenta');
+        const nuevoStock = document.getElementById('nuevoStock');
+
+        const total = precio * cantidad;
+        const stockRestante = stock - cantidad;
+
+        if (totalVenta) totalVenta.textContent = Helpers.formatCurrency(total);
+        if (nuevoStock) nuevoStock.textContent = stockRestante;
+
+        resumenVenta.classList.remove('hidden');
+    }
+
+    static async handleSubmitVenta(e) {
+        e.preventDefault();
+
+        const selectProducto = document.getElementById('selectProducto');
+        const cantidadVenta = document.getElementById('cantidadVenta');
+
+        if (!selectProducto || !cantidadVenta) return;
+
+        const productoId = selectProducto.value;
+        const cantidad = parseInt(cantidadVenta.value);
+
+        const ventaData = {
+            productoId: productoId,
+            cantidad: cantidad,
+        };
+
+        const result = await VentasService.crearVenta(ventaData);
+
+        if (result.success) {
+            Helpers.showNotification(result.message || 'Venta registrada exitosamente', 'success');
+            ModalHelper.closeModal('modalVenta');
+            this.loadSales(); 
+            ProductosUI.loadProducts();
+        } else {
+            const errorMsg = result.errors ? result.errors.map(e => e.message || e).join(', ') : (result.error || 'Error al registrar venta');
+            Helpers.showNotification(errorMsg, 'error');
+        }
+    }
+
+    static async eliminarVenta(id) {
+        if (!confirm('¿Está seguro de eliminar esta venta? El stock del producto será restaurado.')) {
+            return;
+        }
+
+        const result = await VentasService.eliminarVenta(id);
+
+        if (result.success) {
+            Helpers.showNotification(result.message || 'Venta eliminada exitosamente', 'success');
+            this.loadSales();
+            ProductosUI.loadProducts();
+        } else {
+            Helpers.showNotification(result.error || 'Error al eliminar venta', 'error');
+        }
+    }
+
+    static async actualizarContadorVentas() {
+        const ventasHoyElement = document.getElementById('ventasHoy');
+        if (!ventasHoyElement) return;
+
+        const hoy = new Date().toDateString();
+
+        const ventasHoy = this.ventasData.filter(venta => {
+            const fechaVenta = new Date(venta.fecha).toDateString();
+            return fechaVenta === hoy;
+        });
+
+        ventasHoyElement.textContent = ventasHoy.length;
+    }
+
+    static async loadStatistics() {
+        console.log('📈 Cargando estadísticas...');
+        const container = document.getElementById('estadisticasContainer');
+        if (!container) return;
+
+        container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Cargando estadísticas...</p></div>`;
+        
+        const result = await VentasService.obtenerEstadisticas();
+        
+        if (result.success && result.data) {
+            this.renderStatistics(result.data);
+        } else {
+            Helpers.showNotification(result.error || 'Error al cargar estadísticas', 'error');
+            container.innerHTML = `<p class="text-center text-danger">Error al cargar estadísticas</p>`;
+        }
+    }
+
+    static renderStatistics(stats) {
+        const container = document.getElementById('estadisticasContainer');
+        if (!container) return;
+
+        const { resumen, ventasPorProducto } = stats;
+
+        const totalVentas = resumen.totalVentas || 0;
+        const totalUnidades = resumen.totalUnidades || 0;
+        const promedioVenta = resumen.ventaPromedio || 0;
+        
+        let productoMasVendido = "N/A";
+        let unidadesMasVendido = 0;
+        if(ventasPorProducto.length > 0) {
+            productoMasVendido = ventasPorProducto[0]._id;
+            unidadesMasVendido = ventasPorProducto[0].unidadesVendidas;
+        }
+
+        container.innerHTML = `
+            <div class="stat-card">
+                <div class="stat-icon primary">💰</div>
+                <div class="stat-info">
+                    <h3>${Helpers.formatCurrency(totalVentas)}</h3>
+                    <p>Total en Ventas</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon success">🛒</div>
+                <div class="stat-info">
+                    <h3>${totalUnidades}</h3>
+                    <p>Unidades Vendidas</p>
+                </div>
+            </div>
+            <div class.stat-card">
+                <div class="stat-icon warning">📊</div>
+                <div class.stat-info">
+                    <h3>${Helpers.formatCurrency(promedioVenta)}</h3>
+                    <p>Promedio por Venta</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon secondary">🎮</div>
+                <div class="stat-info">
+                    <h3>${productoMasVendido}</h3>
+                    <p>Producto Más Vendido (${unidadesMasVendido} unidades)</p>
+                </div>
+            </div>
+        `;
     }
 }
 
-// Inicializar cuando el DOM esté listo
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 DOM cargado, inicializando VentasUI...');
-    VentasUI.init();
-});
-
-// También exportar para uso global
 window.VentasUI = VentasUI;

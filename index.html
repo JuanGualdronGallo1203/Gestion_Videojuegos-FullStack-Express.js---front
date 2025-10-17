@@ -23,6 +23,10 @@
                     <span class="stat-label">Productos</span>
                     <span class="stat-value" id="totalProductos">0</span>
                 </div>
+                <div class="stat-item">
+                    <span class="stat-label">Ventas Hoy</span>
+                    <span class="stat-value" id="ventasHoy">0</span>
+                </div>
             </div>
         </div>
     </header>
@@ -37,6 +41,10 @@
             <button class="nav-btn" data-section="ventas">
                 <span>💰</span>
                 Ventas
+            </button>
+            <button class="nav-btn" data-section="estadisticas">
+                <span>📊</span>
+                Estadísticas
             </button>
         </div>
     </nav>
@@ -243,14 +251,16 @@
     <!-- Scripts -->
     <script src="./js/utils/helpers.js"></script>
     <script src="./js/utils/validators.js"></script>
+
     <script src="./js/api/productosApi.js"></script>
     <script src="./js/api/ventasApi.js"></script>
-    <script src="./js/models/Sale.js"></script>
+
     <script src="./js/services/productosService.js"></script>
     <script src="./js/services/ventasService.js"></script>
+
     <script src="./js/components/productosUI.js"></script>
-    <script src="./js/components/ventasUI.js"></script>
-    <script src="./js/models/"></script>
+    <script src="./js/components/ventasUI.js"></script> 
+
     <script src="./js/app.js"></script>
 </body>
 </html>

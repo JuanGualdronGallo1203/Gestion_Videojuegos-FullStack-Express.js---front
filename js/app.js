@@ -13,14 +13,16 @@ class GameStoreApp {
     }
 
     static initializeApp() {
-        // Initialize navigation
+        // Initialize navigation (esto setea los listeners de los tabs)
         NavigationHelper.init();
         
-        // Initialize UI components
+        // Initialize UI components (esto setea listeners de botones, modales, etc.)
         ProductosUI.init();
         VentasUI.init();
         
         // Show default section
+        // ESTA LÍNEA ES CLAVE: Carga la app y muestra la sección de productos,
+        // lo que a su vez dispara loadProducts() a través del NavigationHelper.
         NavigationHelper.showSection('productos');
     }
 
@@ -34,7 +36,8 @@ class GameStoreApp {
         // Unhandled promise rejection handler
         window.addEventListener('unhandledrejection', (event) => {
             console.error('Promise rechazada no manejada:', event.reason);
-            Helpers.showNotification('Error en operación asíncrona', 'error');
+            const errorMsg = event.reason?.message || 'Error en operación asíncrona';
+            Helpers.showNotification(errorMsg, 'error');
             event.preventDefault();
         });
 
@@ -323,7 +326,6 @@ const additionalCSS = `
         font-size: 0.9rem;
     }
 }
-}
 `;
 
 // Add additional CSS to document
@@ -331,16 +333,10 @@ const styleSheet = document.createElement('style');
 styleSheet.textContent = additionalCSS;
 document.head.appendChild(styleSheet);
 
-// Initialize the application when DOM is ready
+// Este es el único listener para DOMContentLoaded
 document.addEventListener('DOMContentLoaded', function()  {
     GameStoreApp.init();
-       if (typeof ventasUI !== 'undefined') {
-        ventasUI.cargarVentas();
-        ventasUI.cargarProductosParaVenta();
-       }
 });
-
-
 
 // Make global functions available
 window.GameStoreApp = GameStoreApp;
